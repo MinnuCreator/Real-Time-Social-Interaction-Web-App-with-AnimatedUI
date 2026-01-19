@@ -1,0 +1,546 @@
+<html lang="en" class="dark"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orbit - Real-time Social</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin="" src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin="" src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Framer Motion -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    
+    <!-- Iconify -->
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        zinc: {
+                            850: '#1f1f22',
+                            950: '#09090b', // Deep dark background
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Custom Scrollbar for Chrome/Safari/Webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #09090b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46; 
+        }
+        
+        body {
+            background-color: #000000;
+            color: #e4e4e7;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Hide scrollbar for clean UI but keep functionality */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-black text-zinc-200 overflow-hidden h-screen w-full selection:bg-zinc-800 selection:text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // --- Mock Data Generators ---
+        const USERS = [
+            { id: 'u1', name: 'Alex Rivera', handle: '@arivera', avatar: 'https://i.pravatar.cc/150?u=a', bio: 'Frontend Architect. Building smooth interfaces.', followers: '12.4k' },
+            { id: 'u2', name: 'Sarah Chen', handle: '@schen_dev', avatar: 'https://i.pravatar.cc/150?u=b', bio: 'Product Designer @ Vercel. Minimalist.', followers: '8.2k' },
+            { id: 'u3', name: 'Jordan Lee', handle: '@jlee_code', avatar: 'https://i.pravatar.cc/150?u=c', bio: 'Rust & WASM enthusiast.', followers: '4.5k' },
+            { id: 'u4', name: 'Elena B.', handle: '@elena_b', avatar: 'https://i.pravatar.cc/150?u=d', bio: 'UX Research & Accessibility.', followers: '9.1k' },
+        ];
+
+        const CONTENT_TEMPLATES = [
+            "Just shipped the new animation engine. The performance gains are incredible on mobile devices using the new intersection observer strategy. 🚀",
+            "Designing with constraints actually liberates creativity. Less is often more when it comes to UI density.",
+            "Does anyone else feel like TypeScript 5.0 just changed the game completely? The const type parameters are a lifesaver.",
+            "Spending the weekend refactoring legacy code. It's oddly therapeutic to see lines of code shrink while functionality remains same.",
+            "Dark mode isn't just a feature, it's a lifestyle choice at this point. #design #ui"
+        ];
+
+        const generatePost = (id) => {
+            const user = USERS[Math.floor(Math.random() * USERS.length)];
+            return {
+                id: id || Date.now().toString(),
+                user,
+                content: CONTENT_TEMPLATES[Math.floor(Math.random() * CONTENT_TEMPLATES.length)],
+                timestamp: 'Just now',
+                stats: {
+                    likes: Math.floor(Math.random() * 50),
+                    comments: Math.floor(Math.random() * 10),
+                    shares: Math.floor(Math.random() * 5),
+                },
+                liked: false
+            };
+        };
+
+        // --- Icons Component Helper ---
+        const Icon = ({ icon, className = "", onClick }) => (
+            <iconify-icon 
+                icon={`solar:${icon}-linear`} 
+                class={className} 
+                style={{ fontSize: '1.25rem' }} // approx 20px
+                onClick={onClick}
+            ></iconify-icon>
+        );
+
+        // --- Components ---
+
+        // 1. Sidebar (Navigation)
+        const Sidebar = ({ setView }) => {
+            return (
+                <aside class="hidden md:flex flex-col w-64 h-full border-r border-zinc-900 bg-black/50 backdrop-blur-xl p-6 fixed left-0 top-0 z-20">
+                    <div class="flex items-center gap-3 mb-10 cursor-pointer" onClick={() => setView('feed')}>
+                        <div class="w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center">
+                             <span class="text-black font-bold tracking-tight text-xs">OR</span>
+                        </div>
+                        <h1 class="font-semibold text-lg tracking-tight text-white">Orbit</h1>
+                    </div>
+
+                    <nav class="flex-1 space-y-2">
+                        <NavItem icon="home-2" label="Home" active onClick={() => setView('feed')} />
+                        <NavItem icon="bell" label="Notifications" count="3" />
+                        <NavItem icon="bookmark" label="Bookmarks" />
+                        <NavItem icon="users-group-rounded" label="Communities" />
+                        <NavItem icon="user" label="Profile" onClick={() => setView('profile')} />
+                    </nav>
+
+                    <div class="mt-auto pt-6 border-t border-zinc-900">
+                         <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-900/50 cursor-pointer transition-colors duration-200">
+                            <img src={USERS[0].avatar} class="w-8 h-8 rounded-full border border-zinc-700" alt="Me" />
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-zinc-200 truncate">{USERS[0].name}</p>
+                                <p class="text-xs text-zinc-500 truncate">{USERS[0].handle}</p>
+                            </div>
+                            <Icon icon="settings" className="text-zinc-500" />
+                        </div>
+                    </div>
+                </aside>
+            );
+        };
+
+        const NavItem = ({ icon, label, active, count, onClick }) => (
+            <div 
+                onClick={onClick}
+                class={`group flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-all duration-200 ${active ? 'bg-zinc-900 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'}`}
+            >
+                <Icon icon={icon} className={active ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-200'} />
+                <span class="text-sm font-medium">{label}</span>
+                {count && <span class="ml-auto text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full">{count}</span>}
+            </div>
+        );
+
+        // 2. Post Component
+        const Post = ({ post, onProfileClick }) => {
+            const [liked, setLiked] = useState(post.liked);
+            const [likesCount, setLikesCount] = useState(post.stats.likes);
+
+            const handleLike = () => {
+                if (liked) {
+                    setLikesCount(prev => prev - 1);
+                } else {
+                    setLikesCount(prev => prev + 1);
+                }
+                setLiked(!liked);
+            };
+
+            return (
+                <motion.div 
+                    layout
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+                    class="w-full border-b border-zinc-900 p-6 hover:bg-zinc-900/20 transition-colors duration-300"
+                >
+                    <div class="flex gap-4">
+                        <motion.img 
+                            whileHover={{ scale: 1.05 }}
+                            src={post.user.avatar} 
+                            alt={post.user.name} 
+                            class="w-10 h-10 rounded-full cursor-pointer border border-zinc-800"
+                            onClick={() => onProfileClick(post.user)}
+                        />
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span 
+                                    class="font-medium text-sm text-zinc-100 cursor-pointer hover:underline"
+                                    onClick={() => onProfileClick(post.user)}
+                                >
+                                    {post.user.name}
+                                </span>
+                                <span class="text-sm text-zinc-500">{post.user.handle}</span>
+                                <span class="text-xs text-zinc-600 mx-1">•</span>
+                                <span class="text-xs text-zinc-500">{post.timestamp}</span>
+                            </div>
+                            
+                            <p class="text-sm text-zinc-300 leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
+                            
+                            <div class="flex items-center gap-6 pt-1">
+                                <ReactionButton 
+                                    icon="heart" 
+                                    count={likesCount} 
+                                    active={liked} 
+                                    onClick={handleLike} 
+                                    activeColor="text-rose-500" 
+                                />
+                                <ReactionButton icon="chat-round" count={post.stats.comments} />
+                                <ReactionButton icon="restart" count={post.stats.shares} />
+                                <ReactionButton icon="upload-minimalistic" />
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            );
+        };
+
+        const ReactionButton = ({ icon, count, active, onClick, activeColor = "text-zinc-100" }) => (
+            <motion.button 
+                whileTap={{ scale: 0.85 }}
+                onClick={onClick}
+                class={`group flex items-center gap-1.5 text-xs font-medium transition-colors duration-200 ${active ? activeColor : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+                <div class={`p-1.5 rounded-full transition-colors ${active ? 'bg-rose-500/10' : 'group-hover:bg-zinc-800'}`}>
+                    <iconify-icon 
+                        icon={active && icon === 'heart' ? 'solar:heart-bold' : `solar:${icon}-linear`} 
+                        class={active ? activeColor : 'text-zinc-500 group-hover:text-zinc-300'}
+                    ></iconify-icon>
+                </div>
+                {count !== undefined && <span>{count}</span>}
+            </motion.button>
+        );
+
+        // 3. Create Post Widget
+        const ComposePost = ({ onPost }) => {
+            const [text, setText] = useState('');
+            const [isFocused, setIsFocused] = useState(false);
+
+            const handleSubmit = () => {
+                if (!text.trim()) return;
+                onPost(text);
+                setText('');
+            };
+
+            return (
+                <div class={`border-b border-zinc-900 p-6 transition-colors duration-300 ${isFocused ? 'bg-zinc-900/10' : ''}`}>
+                    <div class="flex gap-4">
+                        <img src={USERS[0].avatar} class="w-10 h-10 rounded-full border border-zinc-800" />
+                        <div class="flex-1">
+                            <textarea 
+                                value={text}
+                                onChange={(e) => setText(e.target.value)}
+                                onFocus={() => setIsFocused(true)}
+                                onBlur={() => setIsFocused(false)}
+                                placeholder="What's happening?"
+                                class="w-full bg-transparent border-none outline-none text-zinc-100 text-base placeholder:text-zinc-600 resize-none min-h-[80px]"
+                            ></textarea>
+                            
+                            <div class="flex items-center justify-between mt-2">
+                                <div class="flex gap-2 text-zinc-500">
+                                    <Icon icon="gallery" className="hover:text-zinc-100 cursor-pointer transition-colors" />
+                                    <Icon icon="smile-circle" className="hover:text-zinc-100 cursor-pointer transition-colors" />
+                                    <Icon icon="calendar-add" className="hover:text-zinc-100 cursor-pointer transition-colors" />
+                                </div>
+                                <button 
+                                    onClick={handleSubmit}
+                                    disabled={!text.trim()}
+                                    class="bg-zinc-100 text-black px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                                >
+                                    Post
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Right Sidebar (Trends/Suggestions)
+        const Widgets = () => (
+            <aside class="hidden xl:block w-80 h-full p-6 fixed right-0 top-0 overflow-y-auto no-scrollbar border-l border-zinc-900 bg-black">
+                <div class="bg-zinc-900/30 rounded-xl border border-zinc-800 p-4 mb-6">
+                    <h2 class="font-semibold text-zinc-100 mb-4 text-sm tracking-tight">Trending Topics</h2>
+                    <div class="space-y-4">
+                        <TrendItem category="Technology" tag="#TailwindCSS" posts="12.5k" />
+                        <TrendItem category="Design" tag="Figma Config" posts="8.2k" />
+                        <TrendItem category="Development" tag="React Server Components" posts="5.1k" />
+                        <TrendItem category="AI" tag="OpenAI DevDay" posts="22k" />
+                    </div>
+                </div>
+
+                <div class="bg-zinc-900/30 rounded-xl border border-zinc-800 p-4">
+                    <h2 class="font-semibold text-zinc-100 mb-4 text-sm tracking-tight">Who to follow</h2>
+                    <div class="space-y-4">
+                        {USERS.slice(1, 4).map(user => (
+                            <div key={user.id} class="flex items-center gap-3">
+                                <img src={user.avatar} class="w-9 h-9 rounded-full border border-zinc-800" />
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-zinc-200 truncate">{user.name}</p>
+                                    <p class="text-xs text-zinc-500 truncate">{user.handle}</p>
+                                </div>
+                                <button class="text-xs bg-zinc-100 text-black px-3 py-1 rounded-full font-medium hover:bg-zinc-200 transition-colors">
+                                    Follow
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </aside>
+        );
+
+        const TrendItem = ({ category, tag, posts }) => (
+            <div class="cursor-pointer hover:bg-zinc-900/50 p-2 -mx-2 rounded transition-colors">
+                <p class="text-xs text-zinc-500 mb-0.5">{category}</p>
+                <p class="text-sm font-medium text-zinc-200">{tag}</p>
+                <p class="text-xs text-zinc-600">{posts} posts</p>
+            </div>
+        );
+
+        // 5. User Profile View
+        const ProfileView = ({ user, onBack }) => (
+            <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                class="min-h-screen"
+            >
+                <div class="sticky top-0 bg-black/80 backdrop-blur-md z-10 border-b border-zinc-900 p-3 flex items-center gap-4">
+                    <button onClick={onBack} class="p-2 hover:bg-zinc-900 rounded-full transition-colors">
+                        <Icon icon="arrow-left" className="text-zinc-100" />
+                    </button>
+                    <div>
+                        <h2 class="font-semibold text-lg text-zinc-100">{user.name}</h2>
+                        <p class="text-xs text-zinc-500">248 posts</p>
+                    </div>
+                </div>
+
+                <div class="relative h-48 bg-gradient-to-r from-zinc-800 to-zinc-900">
+                    {/* Cover Photo */}
+                </div>
+                
+                <div class="px-6 pb-6 relative">
+                    <div class="flex justify-between items-end -mt-10 mb-4">
+                        <img src={user.avatar} class="w-24 h-24 rounded-full border-4 border-black bg-zinc-800" />
+                        <button class="mb-2 bg-transparent border border-zinc-700 text-zinc-100 px-4 py-1.5 rounded-full text-sm font-medium hover:bg-zinc-900 transition-colors">
+                            Edit Profile
+                        </button>
+                    </div>
+
+                    <h1 class="text-xl font-bold text-zinc-100 leading-tight">{user.name}</h1>
+                    <p class="text-sm text-zinc-500 mb-4">{user.handle}</p>
+                    <p class="text-sm text-zinc-300 mb-4 max-w-lg leading-relaxed">{user.bio}</p>
+
+                    <div class="flex gap-4 text-sm text-zinc-500 mb-6">
+                        <span class="flex items-center gap-1"><span class="text-zinc-100 font-semibold">{user.followers}</span> Followers</span>
+                        <span class="flex items-center gap-1"><span class="text-zinc-100 font-semibold">420</span> Following</span>
+                    </div>
+
+                    <div class="flex border-b border-zinc-900 mb-4">
+                        <div class="px-4 py-3 text-sm font-medium text-zinc-100 border-b-2 border-zinc-100">Posts</div>
+                        <div class="px-4 py-3 text-sm font-medium text-zinc-500 hover:text-zinc-300 cursor-pointer">Replies</div>
+                        <div class="px-4 py-3 text-sm font-medium text-zinc-500 hover:text-zinc-300 cursor-pointer">Media</div>
+                    </div>
+
+                    {/* Dummy Content for profile */}
+                    <div class="text-center py-10 text-zinc-600 text-sm">
+                        <Icon icon="lock-keyhole" className="mx-auto mb-2 text-zinc-700" />
+                        <p>No more recent posts available.</p>
+                    </div>
+                </div>
+            </motion.div>
+        );
+
+        // --- Main App Logic ---
+        const App = () => {
+            const [view, setView] = useState('feed'); // 'feed' | 'profile'
+            const [activeProfile, setActiveProfile] = useState(null);
+            const [posts, setPosts] = useState([]);
+            const [newPostCount, setNewPostCount] = useState(0);
+            
+            // Initial Data Load
+            useEffect(() => {
+                const initialPosts = Array.from({ length: 5 }).map(() => generatePost());
+                setPosts(initialPosts);
+            }, []);
+
+            // Simulate Real-time Updates
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    if (Math.random() > 0.6) { // Randomly decide to add a post
+                        const incoming = generatePost(Date.now().toString());
+                        // Just update state visually for the "New posts" pill, don't auto-insert to prevent layout shifts
+                        setNewPostCount(prev => prev + 1);
+                    }
+                }, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const handleShowNewPosts = () => {
+                const newPosts = Array.from({ length: newPostCount }).map(() => generatePost());
+                setPosts(prev => [...newPosts, ...prev]);
+                setNewPostCount(0);
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const handleCreatePost = (text) => {
+                const post = {
+                    id: Date.now().toString(),
+                    user: USERS[0],
+                    content: text,
+                    timestamp: 'Just now',
+                    stats: { likes: 0, comments: 0, shares: 0 },
+                    liked: false
+                };
+                setPosts(prev => [post, ...prev]);
+            };
+
+            const navigateToProfile = (user) => {
+                setActiveProfile(user);
+                setView('profile');
+                window.scrollTo(0,0);
+            };
+
+            return (
+                <div class="flex min-h-screen max-w-7xl mx-auto">
+                    <Sidebar setView={setView} />
+                    
+                    <main class="flex-1 md:ml-64 xl:mr-80 min-h-screen border-r border-zinc-900 relative">
+                        {/* Mobile Header */}
+                        <div class="md:hidden sticky top-0 z-20 bg-black/80 backdrop-blur-md border-b border-zinc-900 p-4 flex justify-between items-center">
+                            <div class="w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center">
+                                <span class="text-black font-bold text-xs">OR</span>
+                            </div>
+                            <h1 class="font-semibold text-zinc-100">Orbit</h1>
+                            <img src={USERS[0].avatar} class="w-8 h-8 rounded-full" />
+                        </div>
+
+                        <AnimatePresence mode="wait">
+                            {view === 'feed' ? (
+                                <motion.div 
+                                    key="feed"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                >
+                                    <div class="sticky top-0 z-10 hidden md:block bg-black/80 backdrop-blur-md border-b border-zinc-900 cursor-pointer">
+                                        <div class="flex">
+                                            <div class="flex-1 text-center py-4 hover:bg-zinc-900/50 transition-colors border-b-2 border-zinc-100">
+                                                <span class="text-sm font-semibold text-zinc-100">For you</span>
+                                            </div>
+                                            <div class="flex-1 text-center py-4 hover:bg-zinc-900/50 transition-colors border-b-2 border-transparent">
+                                                <span class="text-sm font-medium text-zinc-500">Following</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <ComposePost onPost={handleCreatePost} />
+
+                                    {/* Real-time Update Pill */}
+                                    <AnimatePresence>
+                                        {newPostCount > 0 && (
+                                            <motion.div 
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                class="border-b border-zinc-900"
+                                            >
+                                                <button 
+                                                    onClick={handleShowNewPosts}
+                                                    class="w-full py-3 text-sm text-blue-400 hover:text-blue-300 font-medium hover:bg-zinc-900/30 transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <Icon icon="arrow-up" />
+                                                    Show {newPostCount} new posts
+                                                </button>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    <div class="pb-20">
+                                        <AnimatePresence>
+                                            {posts.map(post => (
+                                                <Post 
+                                                    key={post.id} 
+                                                    post={post} 
+                                                    onProfileClick={navigateToProfile} 
+                                                />
+                                            ))}
+                                        </AnimatePresence>
+                                        
+                                        <div class="p-8 flex justify-center">
+                                            <Icon icon="spinner" className="animate-spin text-zinc-600" />
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <ProfileView 
+                                    key="profile" 
+                                    user={activeProfile} 
+                                    onBack={() => setView('feed')} 
+                                />
+                            )}
+                        </AnimatePresence>
+                    </main>
+                    
+                    <Widgets />
+
+                    {/* Mobile Bottom Nav */}
+                    <div class="md:hidden fixed bottom-0 left-0 w-full bg-black border-t border-zinc-900 flex justify-around p-4 z-30">
+                        <Icon icon="home-2" className="text-zinc-100" onClick={() => setView('feed')} />
+                        <Icon icon="magnifer" className="text-zinc-500" />
+                        <Icon icon="bell" className="text-zinc-500" />
+                        <Icon icon="user" className="text-zinc-500" onClick={() => navigateToProfile(USERS[0])} />
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+
+</body></html>
